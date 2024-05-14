@@ -1,4 +1,6 @@
 import asyncio
+import os
+import pickle
 import aiohttp
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -8,13 +10,12 @@ from aiogram.types import Message, User
 from loguru import logger
 import config as cfg
 
-logger.debug("Initializing aiogram objects...")
+logger.debug("Initializing...")
 dp = Dispatcher()
 bot = Bot(cfg.TG_BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 
 self_entity: User
 current_token_index = 0
-event_queue = asyncio.Queue()
 message_log = {
     # chat_id: [message1, message2, ..., messageN]
 }
@@ -135,8 +136,10 @@ async def append_to_message_log(message: Message) -> None:
     if message.chat.id not in message_log.keys():
         message_log[message.chat.id] = [await get_message_text_from_message(message)]
     else:
-        current_list = message_log[message.chat.id]
+        current_list: list = message_log[message.chat.id]
         current_list.append(await get_message_text_from_message(message))
+        if len(current_list) > 1000:
+            current_list.pop(0)
         message_log[message.chat.id] = current_list
 
 
@@ -197,8 +200,8 @@ async def reset_command(message: Message) -> None:
 @dp.message(CommandStart())
 async def start_command(message: Message) -> None:
     if message.chat.id == message.from_user.id:
-        await message.reply("Привет!\nЯ - бот Gemini. Чтобы задать вопрос - просто напиши сообщение, упоминающее "
-                            "меня.\nСбросить мою память - /reset")
+        await message.reply("Привет!\nЯ - бот Gemini. Чтобы задать вопрос - просто напиши сообщение, упоминающее " +
+                            "меня.\nСбросить мою память - /reset (только админы)\nСтатус бота - t.me/aetherlounge/2")
 
 
 @dp.message()
@@ -223,6 +226,13 @@ async def main():
 
     await bot.delete_webhook(drop_pending_updates=True)
 
+    if os.path.exists("chats.pki"):
+        logger.info("Loading saved message log...")
+        global message_log
+        with open("chats.pki", "rb") as file:
+            message_log = pickle.load(file)
+        logger.success("Loaded.")
+
     logger.success("Working...")
     await dp.start_polling(bot)
 
@@ -231,5 +241,8 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except (KeyboardInterrupt, asyncio.exceptions.CancelledError):
-        logger.info("Ctrl+С, exiting peacefully...")
+        logger.info("Shutting down...")
+        with open("chats.pki", "wb") as file:
+            pickle.dump(message_log, file)
+            logger.success("Message log saved")
         exit()
