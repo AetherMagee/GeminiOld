@@ -101,7 +101,13 @@ async def query_api(prompt: str) -> tuple[str, bool]:
                     return "❌ Сбой обработки ответа Gemini API. Попробуйте снова. ", True
     except aiohttp.ClientError as error:
         logger.error(f"Error querying Gemini API: {str(error)}")
-        return "❌ Сбой Gemini API. Попробуйте снова. ", True
+        if error.status:
+            if error.status == 500:
+                return "❌ Сбои на стороне Gemini API. Пожалуйста, подождите пару минут. ", True
+            if error.status == 429:
+                return "❌ Бот перегружен запросами, пожалуйста, попробуйте снова через пару минут. ", True
+
+        return f"❌ Сбой Gemini API. Попробуйте снова. ", True
 
 
 async def ask_gemini(message: Message) -> str:
@@ -126,6 +132,8 @@ async def ask_gemini(message: Message) -> str:
             f"Generated for {message.from_user.id} in {message.chat.id}. Context: {len(message_log[message.chat.id])}")
     else:
         current_list.append("You: *Failed to reply for some reason. Be better next time.*")
+        if len(current_list) > cfg.MEMORY_LIMIT_MESSAGES:
+            current_list.pop(0)
         message_log[message.chat.id] = current_list
     return output
 
@@ -192,7 +200,7 @@ async def reset_command(message: Message) -> None:
 
     global message_log
     try:
-        message_log.pop(message.chat.id)
+        message_log[message.chat.id] = []
         await message.reply("✅ Память очищена.")
         logger.info(f"Memory reset for {message.chat.id}")
     except KeyError:
@@ -202,8 +210,14 @@ async def reset_command(message: Message) -> None:
 @dp.message(CommandStart())
 async def start_command(message: Message) -> None:
     if message.chat.id == message.from_user.id:
-        await message.reply("Привет!\nЯ - бот Gemini. Чтобы задать вопрос - просто напиши сообщение, упоминающее " +
-                            "меня.\nСбросить мою память - /reset (только админы)\nСтатус бота - t.me/aetherlounge/2",
+        await message.reply("👋")
+        await asyncio.sleep(2)
+        await message.reply(f"""{html.bold("Привет!")}
+🤖 Я - бот Gemini. Чтобы задать вопрос - просто напиши мне сообщение. {html.italic(
+            "(в чате нужно либо ответить на моё сообщение, либо упомянуть меня через @)")}
+🔔 Проверить статус бота можно {html.link("тут", "https://t.me/aetherlounge/2")} или через /status
+💬 Сбросить мою память - /reset {html.italic("(в чате - только администраторы)")}
+""",
                             disable_web_page_preview=True)
 
 
