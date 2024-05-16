@@ -2,7 +2,6 @@ import asyncio
 import importlib
 import os
 import pickle
-
 import aiohttp
 from aiogram import Bot, Dispatcher, html
 from aiogram.client.default import DefaultBotProperties
@@ -205,6 +204,24 @@ async def reset_command(message: Message) -> None:
         logger.info(f"Memory reset for {message.chat.id}")
     except KeyError:
         await message.reply("✅ Память уже пуста.")
+
+
+@dp.message(Command("partialreset"))
+async def partial_reset_command(message: Message) -> None:
+    if not message.chat.id == message.from_user.id and message.from_user.id != cfg.ADMIN_ID:
+        admins = await bot.get_chat_administrators(message.chat.id)
+        member = await bot.get_chat_member(message.chat.id, message.from_user.id)
+        if member not in admins:
+            await message.reply("❌ У вас недостаточно прав.")
+            return
+
+    global message_log
+    new_msglog = []
+    for stored_message in message_log[message.chat.id]:
+        if not stored_message.startswith("You: "):
+            new_msglog.append(stored_message)
+    message_log[message.chat.id] = new_msglog
+    await message.reply("✅ Память частично очищена - бот не помнит, как отвечал вам.")
 
 
 @dp.message(CommandStart())
