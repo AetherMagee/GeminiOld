@@ -98,16 +98,16 @@ async def query_api(prompt: str) -> tuple[str, bool]:
                 else:
                     if "blockReason" in str(result) or "safetyRatings" in str(result):
                         logger.error("Request blocked due to filtering")
-                        return "❌ Запрос был заблокирован на стороне Gemini API. ", True
+                        return "❌ Запрос был заблокирован цензурой Gemini API. ", True
                     logger.error(f"Unexpected response structure: {result}")
                     return "❌ Сбой обработки ответа Gemini API. Попробуйте снова. ", True
     except aiohttp.ClientError as error:
         logger.error(f"Error querying Gemini API: {str(error)}")
         if error.status:
             if error.status == 500:
-                return "❌ Сбои на стороне Gemini API. Пожалуйста, подождите пару минут. ", True
+                return "❌ Наблюдаются сбои на стороне Gemini API. Пожалуйста, подождите пару минут. ", True
             if error.status == 429:
-                return "❌ Бот перегружен запросами, пожалуйста, попробуйте снова через пару минут. ", True
+                return "❌ Бот перегружен запросами. Пожалуйста, подождите пару минут. ", True
 
         return f"❌ Сбой Gemini API. Попробуйте снова. ", True
 
