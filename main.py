@@ -91,6 +91,9 @@ async def query_api(prompt: str) -> tuple[str, bool]:
 
                 if 'candidates' in result and 'content' in result['candidates'][0] and 'parts' in \
                         result['candidates'][0]['content']:
+                    # Temp fix to avoid the ban wave - Remove this
+                    if "42777" in result['candidates'][0]['content']['parts'][0]['text'].replace(" ", ""):
+                        return "❌ Запрос был заблокирован цензурой Gemini API. ", True
                     return result['candidates'][0]['content']['parts'][0]['text'], False
                 else:
                     if "blockReason" in str(result) or "safetyRatings" in str(result):
