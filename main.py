@@ -91,9 +91,6 @@ async def query_api(prompt: str) -> tuple[str, bool]:
 
                 if 'candidates' in result and 'content' in result['candidates'][0] and 'parts' in \
                         result['candidates'][0]['content']:
-                    # Temp fix to avoid the ban wave - Remove this
-                    if "42777" in result['candidates'][0]['content']['parts'][0]['text'].replace(" ", ""):
-                        return "❌ Запрос был заблокирован цензурой Gemini API. ", True
                     return result['candidates'][0]['content']['parts'][0]['text'], False
                 else:
                     if "blockReason" in str(result) or "safetyRatings" in str(result):
@@ -156,7 +153,10 @@ async def append_to_message_log(message: Message) -> None:
 
 
 def format_reply_text(reply_text, max_length=50) -> str:
-    """Black magic."""
+    """
+    Shorten string to given max length
+    ("The quick brown fox jumped over the lazy dog", 30) -> "The quick ... lazy dog"
+    """
     reply_text = reply_text.replace('\n', ' ')
     if len(reply_text) > max_length:
         part_length = max_length // 2 - len(" {...} ") // 2

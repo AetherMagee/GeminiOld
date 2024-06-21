@@ -1,6 +1,17 @@
 services:
   gemini-bot:
+    container_name: gemini-bot
     build: .
     volumes:
       - ./data:/data
+    restart: unless-stopped
+    depends_on:
+      - ctrld
+    dns:
+      - 172.18.0.2
+
+  ctrld:
+    container_name: gemini-ctrld
+    image: controldns/ctrld
+    command: --cd=comss
     restart: unless-stopped
