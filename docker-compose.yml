@@ -1,3 +1,5 @@
+version: "2"
+
 services:
   gemini-bot:
     container_name: gemini-bot
@@ -7,11 +9,25 @@ services:
     restart: unless-stopped
     depends_on:
       - ctrld
+    networks:
+      gemininet:
+        ipv4_address: 10.5.0.3
     dns:
-      - 172.18.0.2
+      - 10.5.0.2
 
   ctrld:
     container_name: gemini-ctrld
     image: controldns/ctrld
-    command: --cd=comss
+    command: --cd=comss -v
     restart: unless-stopped
+    networks:
+      gemininet:
+        ipv4_address: 10.5.0.2
+
+networks:
+  gemininet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.5.0.0/16
+          gateway: 10.5.0.1
