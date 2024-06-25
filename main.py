@@ -164,9 +164,10 @@ async def ask_gemini(message: Message) -> str:
             f"Generated for {message.from_user.id} in {message.chat.id}. Context: {len(message_log[message.chat.id])}")
     except Exception as error:
         logger.error("Failed to generate message. Exception: " + str(error))
-        logger.debug(response.candidates[0].safety_ratings)
-        logger.debug(response.candidates[0].finish_reason)
+        logger.debug(response.prompt_feedback)
         output = "❌ Произошел сбой Gemini API."
+        if response.prompt_feedback.block_reason:
+            output = "❌ Запрос был заблокирован цензурой Gemini API."
         current_list = message_log[message.chat.id]
         current_list.append("You: *Failed to reply due to an error. Be better next time.*")
         if len(current_list) > cfg.MEMORY_LIMIT_MESSAGES:
