@@ -18,7 +18,7 @@ services:
   ctrld:
     container_name: gemini-ctrld
     image: controldns/ctrld
-    command: --cd=comss -v
+    command: --cd=comss
     restart: unless-stopped
     networks:
       gemininet:

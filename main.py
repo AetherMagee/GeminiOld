@@ -2,12 +2,13 @@ import asyncio
 import importlib
 import os
 import pickle
-import aiohttp
+import PIL.Image
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandStart
-from aiogram.types import Message, User
+from aiogram.types import Message, User, PhotoSize
+import google.generativeai as genai
 from loguru import logger
 
 import config as cfg
@@ -41,72 +42,85 @@ def save(file_name: str = "chats.pki") -> None:
 # ===================================
 # Gemini API Part
 # ===================================
-def get_gemini_api_url():
+def get_gemini_token():
     global current_token_index
-    url = cfg.GEMINI_API_LINK + cfg.GEMINI_TOKENS[current_token_index]
-    current_token_index = (current_token_index + 1) % len(cfg.GEMINI_TOKENS)
-    return url
+    current_token_index += 1
+    return cfg.GEMINI_TOKENS[current_token_index % len(cfg.GEMINI_TOKENS)]
 
 
-async def query_api(prompt: str) -> tuple[str, bool]:
-    headers = {
-        'Content-Type': 'application/json'
+# async def query_api(prompt: str) -> tuple[str, bool]:
+#     headers = {
+#         'Content-Type': 'application/json'
+#     }
+#     data = {
+#         "contents": [{
+#             "parts": [{"text": prompt}]
+#         }],
+#         "safetySettings": [
+#             {
+#                 "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+#                 "threshold": "BLOCK_NONE"
+#             },
+#             {
+#                 "category": "HARM_CATEGORY_HATE_SPEECH",
+#                 "threshold": "BLOCK_NONE"
+#             },
+#             {
+#                 "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+#                 "threshold": "BLOCK_NONE"
+#             },
+#             {
+#                 "category": "HARM_CATEGORY_HARASSMENT",
+#                 "threshold": "BLOCK_NONE"
+#             }
+#         ],
+#         "generationConfig": {
+#             "temperature": 1,
+#             "maxOutputTokens": 80000,
+#             "topP": 1,
+#             "topK": 200
+#         }
+#     }
+#     url = get_gemini_api_url()
+#
+#     try:
+#         async with aiohttp.ClientSession() as session:
+#             async with session.post(url, headers=headers, json=data) as response:
+#                 response.raise_for_status()
+#                 result = await response.json()
+#
+#                 if 'candidates' in result and 'content' in result['candidates'][0] and 'parts' in \
+#                         result['candidates'][0]['content']:
+#                     return result['candidates'][0]['content']['parts'][0]['text'], False
+#                 else:
+#                     if "blockReason" in str(result) or "safetyRatings" in str(result):
+#                         logger.error("Request blocked due to filtering")
+#                         return "❌ Запрос был заблокирован цензурой Gemini API. ", True
+#                     logger.error(f"Unexpected response structure: {result}")
+#                     return "❌ Сбой обработки ответа Gemini API. Попробуйте снова. ", True
+#     except aiohttp.ClientError as error:
+#         logger.error(f"Error querying Gemini API: {str(error)}")
+#         if error.status:
+#             if error.status == 500:
+#                 return "❌ Наблюдаются сбои на стороне Gemini API. Пожалуйста, подождите пару минут. ", True
+#             if error.status == 429:
+#                 return "❌ Бот перегружен запросами. Пожалуйста, подождите пару минут. ", True
+#
+#         return f"❌ Сбой Gemini API. Попробуйте снова. ", True
+
+async def query_api(prompt: str, photo: bytes = None):
+    genai.configure(api_key=get_gemini_token())
+    model = genai.GenerativeModel("gemini-1.5-pro-latest")
+    safety = {
+        "SEXUALLY_EXPLICIT": "block_none",
+        "HARASSMENT": "block_none",
+        "HATE_SPEECH": "block_none",
     }
-    data = {
-        "contents": [{
-            "parts": [{"text": prompt}]
-        }],
-        "safetySettings": [
-            {
-                "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                "threshold": "BLOCK_NONE"
-            },
-            {
-                "category": "HARM_CATEGORY_HATE_SPEECH",
-                "threshold": "BLOCK_NONE"
-            },
-            {
-                "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                "threshold": "BLOCK_NONE"
-            },
-            {
-                "category": "HARM_CATEGORY_HARASSMENT",
-                "threshold": "BLOCK_NONE"
-            }
-        ],
-        "generationConfig": {
-            "temperature": 1,
-            "maxOutputTokens": 80000,
-            "topP": 1,
-            "topK": 200
-        }
-    }
-    url = get_gemini_api_url()
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=headers, json=data) as response:
-                response.raise_for_status()
-                result = await response.json()
-
-                if 'candidates' in result and 'content' in result['candidates'][0] and 'parts' in \
-                        result['candidates'][0]['content']:
-                    return result['candidates'][0]['content']['parts'][0]['text'], False
-                else:
-                    if "blockReason" in str(result) or "safetyRatings" in str(result):
-                        logger.error("Request blocked due to filtering")
-                        return "❌ Запрос был заблокирован цензурой Gemini API. ", True
-                    logger.error(f"Unexpected response structure: {result}")
-                    return "❌ Сбой обработки ответа Gemini API. Попробуйте снова. ", True
-    except aiohttp.ClientError as error:
-        logger.error(f"Error querying Gemini API: {str(error)}")
-        if error.status:
-            if error.status == 500:
-                return "❌ Наблюдаются сбои на стороне Gemini API. Пожалуйста, подождите пару минут. ", True
-            if error.status == 429:
-                return "❌ Бот перегружен запросами. Пожалуйста, подождите пару минут. ", True
-
-        return f"❌ Сбой Gemini API. Попробуйте снова. ", True
+    if not photo:
+        response = await model.generate_content_async(prompt, safety_settings=safety)
+    else:
+        response = await model.generate_content_async([prompt, photo], safety_settings=safety)
+    return response.text
 
 
 async def ask_gemini(message: Message) -> str:
@@ -117,23 +131,44 @@ async def ask_gemini(message: Message) -> str:
 
     prompt = base_prompt.format(
         chat_type="direct message (DM)" if message.from_user.id == message.chat.id else "group",
-        all_messages=all_messages, target_message=message_log[message.chat.id][-1])
+        all_messages=all_messages, target_message=message_log[message.chat.id][-1],
+        image_warning="\n- This message contains an image. Analyze it thoroughly and MAKE SURE describe it in your "
+                      "response verbosely for your own sake. It will NOT be shown again, so you will use your own "
+                      "text description later on. Start your response with \"This image contains\" or the equivalent "
+                      "in User's speaking language." if message.caption else "")
 
-    output, has_errored = await query_api(prompt)
-    output = output[:-1].replace("  ", " ")
-    current_list = message_log[message.chat.id]
-    if not has_errored:
+    if message.photo:
+        logger.debug("Working with an image...")
+
+        filename = message.photo[-1].file_id + ".jpg"
+        logger.debug(f"Saving image to {filename}...")
+        await bot.download(message.photo[-1].file_id, destination=filename)
+
+        logger.debug(f"Loading {filename}")
+        photo = PIL.Image.open(filename)
+    else:
+        photo = None
+
+    try:
+        output = await query_api(prompt, photo)
+        output = output[:-1].replace("  ", " ")
+        current_list = message_log[message.chat.id]
         current_list.append("You: " + output)
         if len(current_list) > cfg.MEMORY_LIMIT_MESSAGES:
             current_list.pop(0)
         message_log[message.chat.id] = current_list
         logger.success(
             f"Generated for {message.from_user.id} in {message.chat.id}. Context: {len(message_log[message.chat.id])}")
-    else:
-        current_list.append("You: *Failed to reply for some reason. Be better next time.*")
-        if len(current_list) > cfg.MEMORY_LIMIT_MESSAGES:
-            current_list.pop(0)
-        message_log[message.chat.id] = current_list
+    except Exception as error:
+        logger.error("Failed to generate message. Exception: " + str(error))
+        output = "❌ Произошел сбой Gemini API"
+        current_list = message_log[message.chat.id]
+        current_list.append("You: *Failed to reply due to an error. Be better next time.*")
+    finally:
+        if message.photo:
+            os.remove(message.photo[-1].file_id + ".jpg")
+            logger.debug("Image deleted.")
+
     return output
 
 
@@ -171,16 +206,25 @@ def format_reply_text(reply_text, max_length=50) -> str:
     return reply_text
 
 
-async def get_message_text_from_message(message: Message) -> str:
+async def get_message_text_from_message(message: Message, recursion: bool = False) -> str:
     user_display = message.from_user.first_name
     if message.from_user.username and message.from_user.username != message.from_user.first_name:
         user_display += f" ({message.from_user.username})"
 
-    text_content = message.text if message.text is not None else "*No Text*"
+    if message.text:
+        text_content = message.text
+    elif message.caption:
+        text_content = "[MEDIA ATTACHED] " if not recursion else "" + message.caption
+    else:
+        text_content = "*No Text*"
+
+    if recursion:
+        return text_content
+
     text = f"{user_display}: {text_content}"
 
     if message.reply_to_message:
-        reply_text = message.reply_to_message.text if message.reply_to_message.text is not None else "*No Text*"
+        reply_text = await get_message_text_from_message(message.reply_to_message, True)
         text = f"[REPLYING TO: {format_reply_text(reply_text)}] " + text
 
     if self_entity.username in text_content or (
@@ -286,12 +330,13 @@ async def directsend_command(message: Message) -> None:
 
 @dp.message()
 async def main_message_handler(message: Message) -> None:
-    if not message.text:
+    if message.text and message.text.startswith("/") or message.caption and message.caption.startswith("/"):
         return
-    if message.text.startswith("/"):
-        return
+
+    text_content = await get_message_text_from_message(message)
+
     await append_to_message_log(message)
-    text_content = message.text
+
     if self_entity.username in text_content or (
             message.reply_to_message and message.reply_to_message.from_user.id == self_entity.id) or (
             message.from_user.id == message.chat.id):
