@@ -115,12 +115,14 @@ async def query_api(prompt: str, photo: bytes = None):
         "SEXUALLY_EXPLICIT": "block_none",
         "HARASSMENT": "block_none",
         "HATE_SPEECH": "block_none",
+        "DANGEROUS": "block_none",
     }
     if not photo:
         response = await model.generate_content_async(prompt, safety_settings=safety)
     else:
         response = await model.generate_content_async([prompt, photo], safety_settings=safety)
-    return response.text
+
+    return response
 
 
 async def ask_gemini(message: Message) -> str:
@@ -149,8 +151,9 @@ async def ask_gemini(message: Message) -> str:
     else:
         photo = None
 
+    response = await query_api(prompt, photo)
     try:
-        output = await query_api(prompt, photo)
+        output = response.text
         output = output[:-1].replace("  ", " ")
         current_list = message_log[message.chat.id]
         current_list.append("You: " + output)
@@ -161,9 +164,14 @@ async def ask_gemini(message: Message) -> str:
             f"Generated for {message.from_user.id} in {message.chat.id}. Context: {len(message_log[message.chat.id])}")
     except Exception as error:
         logger.error("Failed to generate message. Exception: " + str(error))
-        output = "❌ Произошел сбой Gemini API"
+        logger.debug(response.candidates[0].safety_ratings)
+        logger.debug(response.candidates[0].finish_reason)
+        output = "❌ Произошел сбой Gemini API."
         current_list = message_log[message.chat.id]
         current_list.append("You: *Failed to reply due to an error. Be better next time.*")
+        if len(current_list) > cfg.MEMORY_LIMIT_MESSAGES:
+            current_list.pop(0)
+        message_log[message.chat.id] = current_list
     finally:
         if message.photo:
             os.remove(message.photo[-1].file_id + ".jpg")
@@ -330,14 +338,19 @@ async def directsend_command(message: Message) -> None:
 
 @dp.message()
 async def main_message_handler(message: Message) -> None:
-    if message.text and message.text.startswith("/") or message.caption and message.caption.startswith("/"):
+    if (message.text and message.text.startswith("/")) or (message.caption and message.caption.startswith("/")):
         return
 
-    text_content = await get_message_text_from_message(message)
+    if message.text:
+        text = message.text
+    elif message.caption:
+        text = message.caption
+    else:
+        return
 
     await append_to_message_log(message)
 
-    if self_entity.username in text_content or (
+    if self_entity.username in text or (
             message.reply_to_message and message.reply_to_message.from_user.id == self_entity.id) or (
             message.from_user.id == message.chat.id):
         out = await ask_gemini(message)
