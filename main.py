@@ -3,7 +3,7 @@ import importlib
 import os
 import pickle
 import aiohttp
-from aiogram import Bot, Dispatcher, html
+from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandStart
@@ -16,14 +16,14 @@ logger.add(cfg.DATA_FOLDER + "logs/log_{time}.log", rotation="1 day")
 logger.debug("Initializing...")
 
 dp = Dispatcher()
-bot = Bot(cfg.TG_BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+bot = Bot(cfg.TG_BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN))
 
 self_entity: User
 current_token_index = 0
 message_log = {
     # chat_id: [message1, message2, ..., messageN]
 }
-message_counter = 0  # TEMP FIX REMOVE LATER
+message_counter = 0
 if os.path.exists(cfg.DATA_FOLDER + "prompt.txt"):
     with open(cfg.DATA_FOLDER + "prompt.txt", "r") as prompt_file:
         base_prompt = prompt_file.read()
@@ -218,13 +218,10 @@ async def start_command(message: Message) -> None:
     if message.chat.id == message.from_user.id:
         await message.reply("👋")
         await asyncio.sleep(2)
-        await message.reply(f"""{html.bold("Привет!")}
-🤖 Я - бот Gemini. Чтобы задать вопрос - просто напиши мне сообщение. {html.italic(
-            "(в чате нужно либо ответить на моё сообщение, либо упомянуть меня через @)")}
-🔔 Проверить статус бота можно {html.link("тут", "https://t.me/aetherlounge/2")} или через /status
-💬 Сбросить мою память - /reset {html.italic("(в чате - только администраторы)")}
-""",
-                            disable_web_page_preview=True)
+        await message.reply(f"""Привет! 🤖 Я - бот Gemini. Чтобы задать вопрос - просто напиши мне сообщение. (в чате 
+        нужно либо ответить на моё сообщение, либо упомянуть меня через @) 🔔 Проверить статус бота можно [тут](
+        https://t.me/aetherlounge/2) или через /status 💬 Сбросить мою память - /reset (в чате - только 
+        администраторы) """, disable_web_page_preview=True)
 
 
 @dp.message(Command("broadcast"))
@@ -300,7 +297,7 @@ async def main_message_handler(message: Message) -> None:
             message.from_user.id == message.chat.id):
         out = await ask_gemini(message)
         try:
-            await message.reply(html.quote(out))
+            await message.reply(out)
         except Exception as error:
             logger.error(f"Failed to send response to {message.chat.id} - {str(error)}")
 
