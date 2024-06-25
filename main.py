@@ -74,10 +74,12 @@ async def ask_gemini(message: Message) -> str:
     prompt = base_prompt.format(
         chat_type="direct message (DM)" if message.from_user.id == message.chat.id else "group",
         all_messages=all_messages, target_message=message_log[message.chat.id][-1],
-        image_warning="\n- This message contains an image. Analyze it thoroughly and MAKE SURE describe it in your "
-                      "response verbosely for your own sake. It will NOT be shown again, so you will use your own "
-                      "text description later on. Start your response with \"This image contains\" or the equivalent "
-                      "in User's speaking language." if message.caption else "")
+        image_warning="\n- This message contains an image. Analyze it thoroughly and MAKE SURE you describe it in your "
+                      "response verbosely. It will NOT be shown again, so you will use your own text description "
+                      "later on. Start your response with \"This image contains\" in User's language. After giving an "
+                      "extended description to the picture, proceed to fulfill the User's request. Once again, "
+                      "ALWAYS speak in the language the User is talking to you, EVEN WHEN DESCRIBING THE PICTURE." if
+        message.caption else "")
 
     if message.photo:
         logger.debug("Working with an image...")
@@ -86,7 +88,7 @@ async def ask_gemini(message: Message) -> str:
         logger.debug(f"Saving image to {filename}...")
         await bot.download(message.photo[-1].file_id, destination=filename)
 
-        logger.debug(f"Loading {filename}")
+        logger.debug(f"Loading {filename}...")
         photo = PIL.Image.open(filename)
     else:
         photo = None
@@ -247,9 +249,12 @@ async def status_command(message: Message) -> None:
     all_messages = "\n".join(message_log[message.chat.id])
     genai.configure(api_key=get_gemini_token())
     model = genai.GenerativeModel("gemini-1.5-pro-latest")
-    token_count = await model.count_tokens_async(all_messages)
+    try:
+        token_count = (await model.count_tokens_async(all_messages)).total_tokens
+    except Exception:
+        token_count = 0
 
-    text = text.replace("⏱ Секунду...", f"токенов: {token_count.total_tokens}")
+    text = text.replace("⏱ Секунду...", f"токенов: {token_count}")
     await our_reply.edit_text(text)
 
 
