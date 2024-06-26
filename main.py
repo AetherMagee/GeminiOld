@@ -63,12 +63,16 @@ async def query_api(prompt: str, photo: bytes = None):
         "HATE_SPEECH": "block_none",
         "DANGEROUS": "block_none",
     }
-    if not photo:
-        response = await model.generate_content_async(prompt, safety_settings=safety)
-    else:
-        response = await model.generate_content_async([prompt, photo], safety_settings=safety)
+    try:
+        if not photo:
+            response = await model.generate_content_async(prompt, safety_settings=safety)
+        else:
+            response = await model.generate_content_async([prompt, photo], safety_settings=safety)
 
-    return response
+        return response
+    except Exception as e:
+        logger.error(e)
+        return None
 
 
 async def ask_gemini(message: Message, photo_file_id: str) -> str:
