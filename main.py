@@ -5,9 +5,9 @@ import pickle
 import PIL.Image
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
+from aiogram.enums import ParseMode, ChatAction
 from aiogram.filters import Command, CommandStart
-from aiogram.types import Message, User, PhotoSize
+from aiogram.types import Message, User
 import google.generativeai as genai
 from loguru import logger
 
@@ -48,6 +48,12 @@ def get_gemini_token():
     return cfg.GEMINI_TOKENS[current_token_index % len(cfg.GEMINI_TOKENS)]
 
 
+async def simulate_typing(message: Message) -> None:
+    while True:
+        await bot.send_chat_action(message.chat.id, ChatAction.TYPING)
+        await asyncio.sleep(4)
+
+
 async def query_api(prompt: str, photo: bytes = None):
     genai.configure(api_key=get_gemini_token())
     model = genai.GenerativeModel("gemini-1.5-pro-latest")
@@ -65,7 +71,7 @@ async def query_api(prompt: str, photo: bytes = None):
     return response
 
 
-async def ask_gemini(message: Message) -> str:
+async def ask_gemini(message: Message, photo_file_id: str) -> str:
     global message_log
     logger.info(
         f"Generating for {message.from_user.id} in {message.chat.id}. Context: {len(message_log[message.chat.id])}")
@@ -79,21 +85,32 @@ async def ask_gemini(message: Message) -> str:
                       "later on. Start your response with \"This image contains\" in User's language. After giving an "
                       "extended description to the picture, proceed to fulfill the User's request. Once again, "
                       "ALWAYS speak in the language the User is talking to you, EVEN WHEN DESCRIBING THE PICTURE." if
-        message.caption else "")
+        photo_file_id else "")
 
-    if message.photo:
+    if photo_file_id:
         logger.debug("Working with an image...")
 
-        filename = message.photo[-1].file_id + ".jpg"
-        logger.debug(f"Saving image to {filename}...")
-        await bot.download(message.photo[-1].file_id, destination=filename)
+        filename = "/cache/" + photo_file_id + ".jpg"
+
+        if not os.path.exists(filename):
+            logger.debug(f"Saving image to {filename}...")
+            await bot.download(photo_file_id, destination=filename)
 
         logger.debug(f"Loading {filename}...")
         photo = PIL.Image.open(filename)
     else:
         photo = None
 
-    response = await query_api(prompt, photo)
+    api_task = asyncio.create_task(query_api(prompt, photo))
+    typer_task = asyncio.create_task(simulate_typing(message))
+
+    response = await api_task
+    typer_task.cancel()
+    try:
+        await typer_task
+    except asyncio.CancelledError:
+        pass
+
     try:
         output = response.text
         output = output[:-1].replace("  ", " ")
@@ -115,10 +132,6 @@ async def ask_gemini(message: Message) -> str:
         if len(current_list) > cfg.MEMORY_LIMIT_MESSAGES:
             current_list.pop(0)
         message_log[message.chat.id] = current_list
-    finally:
-        if message.photo:
-            os.remove(message.photo[-1].file_id + ".jpg")
-            logger.debug("Image deleted.")
 
     return output
 
@@ -308,11 +321,24 @@ async def main_message_handler(message: Message) -> None:
     if self_entity.username in text or (
             message.reply_to_message and message.reply_to_message.from_user.id == self_entity.id) or (
             message.from_user.id == message.chat.id):
-        out = await ask_gemini(message)
+
+        # Looking for an image
+        if message.photo:
+            logger.debug("Image from main msg")
+            photo_id = message.photo[-1].file_id
+        elif not message.photo and message.reply_to_message and message.reply_to_message.photo:
+            logger.debug("Image from reply")
+            photo_id = message.reply_to_message.photo[-1].file_id
+        else:
+            logger.debug("No image")
+            photo_id = None
+
+        out = await ask_gemini(message, photo_id)
         try:
             await message.reply(out)
         except Exception as error:
             logger.error(f"Failed to send response to {message.chat.id} - {str(error)}")
+            await message.reply("❌ Ответ был сгенерирован, но Telegram не принял сообщение бота.")
 
     global message_counter
     message_counter += 1
