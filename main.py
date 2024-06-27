@@ -2,14 +2,13 @@ import asyncio
 import importlib
 import os
 import pickle
-import random
 import PIL.Image
 from aiogram import Bot, Dispatcher, html
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode, ChatAction
 from aiogram.exceptions import TelegramRetryAfter
 from aiogram.filters import Command, CommandStart
-from aiogram.types import Message, User
+from aiogram.types import Message, User, ReactionTypeEmoji
 import google.generativeai as genai
 from google.api_core.exceptions import ResourceExhausted
 from loguru import logger
@@ -80,8 +79,8 @@ async def query_api(prompt: str, photo: bytes = None):
             response = await model.generate_content_async([prompt, photo], safety_settings=safety)
 
         return response
-    except Exception as e:
-        logger.error(e)
+    except Exception as error:
+        logger.error(error)
         return None
 
 
@@ -371,10 +370,12 @@ async def main_message_handler(message: Message) -> None:
             out = await ask_gemini(message, photo_id)
         except ResourceExhausted:
             await message.reply("❌ Бот перегружен. Подождите пару минут.")
+            return
         try:
             await message.reply(out)
         except TelegramRetryAfter:
             logger.error(f"Flood wait! Requester: {message.from_user.id} | Chat: {message.chat.id}")
+            await message.react([ReactionTypeEmoji(emoji="🤯")])
             return
         except Exception as error:
             logger.error(f"Failed to send response to {message.chat.id}!")
