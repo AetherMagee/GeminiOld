@@ -19,7 +19,7 @@ logger.add(cfg.DATA_FOLDER + "logs/log_{time}.log", rotation="1 day")
 logger.debug("Initializing...")
 
 dp = Dispatcher()
-bot = Bot(cfg.TG_BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+bot = Bot(cfg.TG_BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN))
 
 self_entity: User
 current_token_index = 0
@@ -152,6 +152,17 @@ async def ask_gemini(message: Message, photo_file_id: str) -> str:
 # ===================================
 # Message Handling Part
 # ===================================
+async def no_markdown(text: str) -> str:
+    """
+    Strips the text of any markdown-related characters.
+    Called if the Telegram API doesn't accept our output.
+    """
+    forbidden_characters = ['*', '_', ']', '[', '`', '\\']
+    for character in forbidden_characters:
+        text = text.replace(character, '')
+    return text
+
+
 async def append_to_message_log(message: Message) -> None:
     global message_log
     if message.chat.id not in message_log.keys():
@@ -354,6 +365,7 @@ async def main_message_handler(message: Message) -> None:
 
     await append_to_message_log(message)
 
+    # If mentioned
     if self_entity.username in text or (
             message.reply_to_message and message.reply_to_message.from_user.id == self_entity.id) or (
             message.from_user.id == message.chat.id):
@@ -366,12 +378,16 @@ async def main_message_handler(message: Message) -> None:
         else:
             photo_id = None
 
+        # Generating response
         try:
             out = await ask_gemini(message, photo_id)
         except ResourceExhausted:
             await message.reply("❌ Бот перегружен. Подождите пару минут.")
             return
+
+        # Sending the response
         try:
+            logger.debug(out)
             await message.reply(out)
         except TelegramRetryAfter:
             logger.error(f"Flood wait! Requester: {message.from_user.id} | Chat: {message.chat.id}")
@@ -380,7 +396,7 @@ async def main_message_handler(message: Message) -> None:
         except Exception as error:
             logger.error(f"Failed to send response to {message.chat.id}!")
             logger.error(error)
-            await message.reply(html.quote(out))
+            await message.reply(await no_markdown(text))
 
     global message_counter
     message_counter += 1
