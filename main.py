@@ -2,8 +2,9 @@ import asyncio
 import importlib
 import os
 import pickle
+from typing import Union
 import PIL.Image
-from aiogram import Bot, Dispatcher, html
+from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode, ChatAction
 from aiogram.exceptions import TelegramRetryAfter
@@ -111,6 +112,7 @@ async def ask_gemini(message: Message, photo_file_id: str) -> str:
 
         logger.debug(f"Loading {filename}...")
         photo = PIL.Image.open(filename)
+        os.remove(filename)
     else:
         photo = None
 
@@ -163,16 +165,27 @@ async def no_markdown(text: str) -> str:
     return text
 
 
-async def append_to_message_log(message: Message) -> None:
+async def append_to_message_log(message: Union[Message, list]) -> None:
     global message_log
-    if message.chat.id not in message_log.keys():
-        message_log[message.chat.id] = [await get_message_text_from_message(message)]
+
+    if isinstance(message, Message):
+        chat_id = message.chat.id
+        text = await get_message_text_from_message(message)
+    elif isinstance(message, list):
+        chat_id = message[0]
+        text = message[1]
     else:
-        current_list: list = message_log[message.chat.id]
-        current_list.append(await get_message_text_from_message(message))
+        logger.error("what the fuck")
+        return
+
+    if chat_id not in message_log.keys():
+        message_log[chat_id] = [text]
+    else:
+        current_list: list = message_log[chat_id]
+        current_list.append(text)
         if len(current_list) > cfg.MEMORY_LIMIT_MESSAGES:
             current_list.pop(0)
-        message_log[message.chat.id] = current_list
+        message_log[chat_id] = current_list
 
 
 def format_reply_text(reply_text, max_length=50) -> str:
@@ -404,6 +417,11 @@ async def main_message_handler(message: Message) -> None:
         except Exception as error:
             logger.error(f"Failed to send response to {message.chat.id}!")
             logger.error(error)
+            await append_to_message_log([message.chat.id, "SYSTEM: Your message was not accepted by the endpoint "
+                                                          "because of incorrect Markdown formatting and therefore the "
+                                                          "formatting was stripped from the message - the User sees "
+                                                          "your message without the formatting. Do better next time. "
+                                                          "Do NOT mention this message ANYWHERE. Move on."])
             await message.reply(await no_markdown(text))
 
     global message_counter
