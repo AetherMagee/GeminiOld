@@ -387,15 +387,16 @@ async def main_message_handler(message: Message) -> None:
             logger.error(f"Failed to send response to {message.chat.id} - {str(error)}")
             await message.reply("❌ Ответ был сгенерирован, но Telegram не принял сообщение бота.")
 
+        await asyncio.sleep(60)
+        if messaging_speed[message.from_user.id] > 0:
+            logger.debug(f"Decreasing msg_speed for {message.from_user.id}")
+            messaging_speed[message.from_user.id] = messaging_speed[message.from_user.id] - 1
+
+
     global message_counter
     message_counter += 1
     if message_counter % 50 == 0:
         save()
-
-    await asyncio.sleep(60)
-    if messaging_speed[message.from_user.id] > 0:
-        logger.debug(f"Decreasing msg_speed for {message.from_user.id}")
-        messaging_speed[message.from_user.id] = messaging_speed[message.from_user.id] - 1
 
 
 async def main():
