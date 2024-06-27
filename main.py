@@ -372,13 +372,14 @@ async def main_message_handler(message: Message) -> None:
         except ResourceExhausted:
             await message.reply("❌ Бот перегружен. Подождите пару минут.")
         try:
-            await message.reply(html.quote(out))
+            await message.reply(out)
         except TelegramRetryAfter:
             logger.error(f"Flood wait! Requester: {message.from_user.id} | Chat: {message.chat.id}")
             return
         except Exception as error:
-            logger.error(f"Failed to send response to {message.chat.id} - {str(error)}")
-            await message.reply("❌ Ответ был сгенерирован, но Telegram не принял сообщение бота.")
+            logger.error(f"Failed to send response to {message.chat.id}!")
+            logger.error(error)
+            await message.reply(html.quote(out))
 
     global message_counter
     message_counter += 1
