@@ -234,6 +234,14 @@ async def reset_command(message: Message) -> None:
         await message.reply("✅ Память уже пуста.")
 
 
+@dp.message(Command("clear"))
+async def clear_command(message: Message) -> None:
+    """
+    Alias for /reset, because Rose is annoying.
+    """
+    await reset_command(message)
+
+
 @dp.message(Command("partialreset"))
 async def partial_reset_command(message: Message) -> None:
     global message_log
@@ -260,8 +268,6 @@ async def start_command(message: Message) -> None:
 async def broadcast(message: Message) -> None:
     if not message.from_user.id == cfg.ADMIN_ID:
         return
-    if not message.from_user.id == message.chat.id:
-        return
 
     text = message.text.replace("/broadcast ", "💬 Сообщение от разработчика бота: ")
     for chat_id in message_log.keys():
@@ -272,6 +278,8 @@ async def broadcast(message: Message) -> None:
             logger.success(f"Broadcast to {chat_id}")
         except Exception as error:
             logger.error(f"Failed to broadcast to {chat_id} - {str(error)}")
+
+    await message.react([ReactionTypeEmoji(emoji="👍")])
 
 
 @dp.message(Command("status"))
@@ -299,8 +307,6 @@ async def status_command(message: Message) -> None:
 async def reload_command(message: Message) -> None:
     if not message.from_user.id == cfg.ADMIN_ID:
         return
-    if not message.from_user.id == message.chat.id:
-        return
 
     importlib.reload(cfg)
     logger.info("Configuration reloaded")
@@ -313,6 +319,7 @@ async def reload_command(message: Message) -> None:
         logger.exception("prompt.txt not found!")
 
     logger.info("Prompt reloaded")
+    await message.react([ReactionTypeEmoji(emoji="👍")])
 
 
 @dp.message(Command("directsend"))
@@ -336,6 +343,7 @@ async def ban(message: Message) -> None:
     global banned_users
     banned_users.append(int(message.text.split(" ")[1]))
     logger.debug(f"Banned {message.text.split(' ')[1]}")
+    await message.react([ReactionTypeEmoji(emoji="👍")])
 
 
 @dp.message(Command("unfuck"))
@@ -346,6 +354,7 @@ async def unban(message: Message) -> None:
     global banned_users
     banned_users.remove(int(message.text.split(" ")[1]))
     logger.debug(f"Unbanned {message.text.split(' ')[1]}")
+    await message.react([ReactionTypeEmoji(emoji="👍")])
 
 
 @dp.message()
