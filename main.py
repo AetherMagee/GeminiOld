@@ -2,13 +2,16 @@ import asyncio
 import importlib
 import os
 import pickle
+import random
 import PIL.Image
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode, ChatAction
+from aiogram.exceptions import TelegramRetryAfter
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message, User
 import google.generativeai as genai
+from google.api_core.exceptions import ResourceExhausted
 from loguru import logger
 
 import config as cfg
@@ -24,7 +27,12 @@ current_token_index = 0
 message_log = {
     # chat_id: [message1, message2, ..., messageN]
 }
-banned_users = [5635716584, 1669763978]
+messaging_speed = {
+    # user_id: count in the last minute
+}
+banned_users = []
+
+
 message_counter = 0
 if os.path.exists(cfg.DATA_FOLDER + "prompt.txt"):
     with open(cfg.DATA_FOLDER + "prompt.txt", "r") as prompt_file:
@@ -321,8 +329,25 @@ async def ban(message: Message) -> None:
 
 @dp.message()
 async def main_message_handler(message: Message) -> None:
+    global banned_users, messaging_speed
     if message.from_user.id in banned_users:
         return
+    else:
+        try:
+            messaging_speed[message.from_user.id] = messaging_speed[message.from_user.id] + 1
+        except KeyError:
+            messaging_speed[message.from_user.id] = 1
+
+        if messaging_speed[message.from_user.id] >= 6:
+            banned_users.append(message.from_user.id)
+            await message.reply("❌Вы превысили количество допустимых запросов в минуту. "
+                                "Попробуйте через пару минут.")
+            timeout = random.randint(90, 300)
+            logger.debug(f"Timed out {message.from_user.id} for {timeout}s")
+            await asyncio.sleep(timeout)
+            messaging_speed[message.from_user.id] = 0
+            banned_users.remove(message.from_user.id)
+            return
 
     if (message.text and message.text.startswith("/")) or (message.caption and message.caption.startswith("/")):
         return
@@ -342,18 +367,21 @@ async def main_message_handler(message: Message) -> None:
 
         # Looking for an image
         if message.photo:
-            logger.debug("Image from main msg")
             photo_id = message.photo[-1].file_id
         elif not message.photo and message.reply_to_message and message.reply_to_message.photo:
-            logger.debug("Image from reply")
             photo_id = message.reply_to_message.photo[-1].file_id
         else:
-            logger.debug("No image")
             photo_id = None
 
-        out = await ask_gemini(message, photo_id)
+        try:
+            out = await ask_gemini(message, photo_id)
+        except ResourceExhausted:
+            await message.reply("❌ Бот перегружен. Подождите пару минут.")
         try:
             await message.reply(out)
+        except TelegramRetryAfter:
+            logger.error(f"Flood wait! Requester: {message.from_user.id} | Chat: {message.chat.id}")
+            return
         except Exception as error:
             logger.error(f"Failed to send response to {message.chat.id} - {str(error)}")
             await message.reply("❌ Ответ был сгенерирован, но Telegram не принял сообщение бота.")
@@ -362,6 +390,11 @@ async def main_message_handler(message: Message) -> None:
     message_counter += 1
     if message_counter % 50 == 0:
         save()
+
+    await asyncio.sleep(60)
+    if messaging_speed[message.from_user.id] > 0:
+        logger.debug(f"Decreasing msg_speed for {message.from_user.id}")
+        messaging_speed[message.from_user.id] = messaging_speed[message.from_user.id] - 1
 
 
 async def main():
