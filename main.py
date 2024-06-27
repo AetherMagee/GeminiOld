@@ -17,7 +17,7 @@ logger.add(cfg.DATA_FOLDER + "logs/log_{time}.log", rotation="1 day")
 logger.debug("Initializing...")
 
 dp = Dispatcher()
-bot = Bot(cfg.TG_BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN))
+bot = Bot(cfg.TG_BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 
 self_entity: User
 current_token_index = 0
