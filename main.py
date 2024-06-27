@@ -330,24 +330,6 @@ async def ban(message: Message) -> None:
 @dp.message()
 async def main_message_handler(message: Message) -> None:
     global banned_users, messaging_speed
-    if message.from_user.id in banned_users:
-        return
-    else:
-        try:
-            messaging_speed[message.from_user.id] = messaging_speed[message.from_user.id] + 1
-        except KeyError:
-            messaging_speed[message.from_user.id] = 1
-
-        if messaging_speed[message.from_user.id] >= 6:
-            banned_users.append(message.from_user.id)
-            await message.reply("❌Вы превысили количество допустимых запросов в минуту. "
-                                "Попробуйте через пару минут.")
-            timeout = random.randint(90, 300)
-            logger.debug(f"Timed out {message.from_user.id} for {timeout}s")
-            await asyncio.sleep(timeout)
-            messaging_speed[message.from_user.id] = 0
-            banned_users.remove(message.from_user.id)
-            return
 
     if (message.text and message.text.startswith("/")) or (message.caption and message.caption.startswith("/")):
         return
@@ -364,6 +346,25 @@ async def main_message_handler(message: Message) -> None:
     if self_entity.username in text or (
             message.reply_to_message and message.reply_to_message.from_user.id == self_entity.id) or (
             message.from_user.id == message.chat.id):
+
+        if message.from_user.id in banned_users:
+            return
+        else:
+            try:
+                messaging_speed[message.from_user.id] = messaging_speed[message.from_user.id] + 1
+            except KeyError:
+                messaging_speed[message.from_user.id] = 1
+
+            if messaging_speed[message.from_user.id] >= 8:
+                banned_users.append(message.from_user.id)
+                await message.reply("❌Вы превысили количество допустимых запросов в минуту. "
+                                    "Попробуйте через пару минут.")
+                timeout = random.randint(90, 300)
+                logger.debug(f"Timed out {message.from_user.id} for {timeout}s")
+                await asyncio.sleep(timeout)
+                messaging_speed[message.from_user.id] = 0
+                banned_users.remove(message.from_user.id)
+                return
 
         # Looking for an image
         if message.photo:
