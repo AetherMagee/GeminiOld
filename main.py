@@ -387,7 +387,6 @@ async def main_message_handler(message: Message) -> None:
 
         # Sending the response
         try:
-            logger.debug(out)
             await message.reply(out)
         except TelegramRetryAfter:
             logger.error(f"Flood wait! Requester: {message.from_user.id} | Chat: {message.chat.id}")
