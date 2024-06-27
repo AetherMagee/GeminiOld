@@ -329,7 +329,7 @@ async def ban(message: Message) -> None:
 
 
 @dp.message(Command("unfuck"))
-async def ban(message: Message) -> None:
+async def unban(message: Message) -> None:
     if not message.from_user.id == cfg.ADMIN_ID:
         return
 
