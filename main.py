@@ -27,11 +27,7 @@ current_token_index = 0
 message_log = {
     # chat_id: [message1, message2, ..., messageN]
 }
-messaging_speed = {
-    # user_id: count in the last minute
-}
 banned_users = []
-
 
 message_counter = 0
 if os.path.exists(cfg.DATA_FOLDER + "prompt.txt"):
@@ -46,6 +42,11 @@ def save(file_name: str = "chats.pki") -> None:
     with open(cfg.DATA_FOLDER + file_name, "wb") as le_file:
         pickle.dump(message_log, le_file)
         logger.success("Message log saved")
+
+    logger.info("Saving banned users...")
+    with open(cfg.DATA_FOLDER + "banned.pki", "wb") as le_file:
+        pickle.dump(banned_users, le_file)
+        logger.success("Banned users saved")
 
 
 # ===================================
@@ -327,9 +328,20 @@ async def ban(message: Message) -> None:
     logger.debug(f"Banned {message.text.split(' ')[1]}")
 
 
+@dp.message(Command("unfuck"))
+async def ban(message: Message) -> None:
+    if not message.from_user.id == cfg.ADMIN_ID:
+        return
+
+    global banned_users
+    banned_users.remove(int(message.text.split(" ")[1]))
+    logger.debug(f"Unbanned {message.text.split(' ')[1]}")
+
+
 @dp.message()
 async def main_message_handler(message: Message) -> None:
-    global banned_users, messaging_speed
+    if message.from_user.id in banned_users:
+        return
 
     if (message.text and message.text.startswith("/")) or (message.caption and message.caption.startswith("/")):
         return
@@ -346,25 +358,6 @@ async def main_message_handler(message: Message) -> None:
     if self_entity.username in text or (
             message.reply_to_message and message.reply_to_message.from_user.id == self_entity.id) or (
             message.from_user.id == message.chat.id):
-
-        if message.from_user.id in banned_users:
-            return
-        else:
-            try:
-                messaging_speed[message.from_user.id] = messaging_speed[message.from_user.id] + 1
-            except KeyError:
-                messaging_speed[message.from_user.id] = 1
-
-            if messaging_speed[message.from_user.id] >= 8:
-                banned_users.append(message.from_user.id)
-                await message.reply("❌Вы превысили количество допустимых запросов в минуту. "
-                                    "Попробуйте через пару минут.")
-                timeout = random.randint(90, 300)
-                logger.debug(f"Timed out {message.from_user.id} for {timeout}s")
-                await asyncio.sleep(timeout)
-                messaging_speed[message.from_user.id] = 0
-                banned_users.remove(message.from_user.id)
-                return
 
         # Looking for an image
         if message.photo:
@@ -387,12 +380,6 @@ async def main_message_handler(message: Message) -> None:
             logger.error(f"Failed to send response to {message.chat.id} - {str(error)}")
             await message.reply("❌ Ответ был сгенерирован, но Telegram не принял сообщение бота.")
 
-        await asyncio.sleep(60)
-        if messaging_speed[message.from_user.id] > 0:
-            logger.debug(f"Decreasing msg_speed for {message.from_user.id}")
-            messaging_speed[message.from_user.id] = messaging_speed[message.from_user.id] - 1
-
-
     global message_counter
     message_counter += 1
     if message_counter % 50 == 0:
@@ -405,12 +392,19 @@ async def main():
 
     await bot.delete_webhook(drop_pending_updates=True)
 
-    if cfg.ENABLE_PERMA_MEMORY and os.path.exists(cfg.DATA_FOLDER + "chats.pki"):
-        logger.info("Loading saved message log...")
-        global message_log
-        with open(cfg.DATA_FOLDER + "chats.pki", "rb") as file:
-            message_log = pickle.load(file)
-        logger.success("Loaded.")
+    if cfg.ENABLE_PERMA_MEMORY:
+        global message_log, banned_users
+        if os.path.exists(cfg.DATA_FOLDER + "chats.pki"):
+            logger.info("Loading saved message log...")
+            with open(cfg.DATA_FOLDER + "chats.pki", "rb") as file:
+                message_log = pickle.load(file)
+
+        if os.path.exists(cfg.DATA_FOLDER + "banned.pki"):
+            logger.info("Loading banned users...")
+            with open(cfg.DATA_FOLDER + "banned.pki", "rb") as file:
+                banned_users = pickle.load(file)
+            logger.debug(f"Banned: {banned_users}")
+            logger.success("Loaded.")
 
     logger.success("Working...")
     await dp.start_polling(bot)
