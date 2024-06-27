@@ -24,6 +24,7 @@ current_token_index = 0
 message_log = {
     # chat_id: [message1, message2, ..., messageN]
 }
+banned_users = [5635716584, 1669763978]
 message_counter = 0
 if os.path.exists(cfg.DATA_FOLDER + "prompt.txt"):
     with open(cfg.DATA_FOLDER + "prompt.txt", "r") as prompt_file:
@@ -308,8 +309,21 @@ async def directsend_command(message: Message) -> None:
     await bot.send_message(target_chat_id, " ".join(a))
 
 
+@dp.message(Command("fuck"))
+async def ban(message: Message) -> None:
+    if not message.from_user.id == cfg.ADMIN_ID:
+        return
+
+    global banned_users
+    banned_users.append(int(message.text.split(" ")[1]))
+    logger.debug(f"Banned {message.text.split(' ')[1]}")
+
+
 @dp.message()
 async def main_message_handler(message: Message) -> None:
+    if message.from_user.id in banned_users:
+        return
+
     if (message.text and message.text.startswith("/")) or (message.caption and message.caption.startswith("/")):
         return
 
