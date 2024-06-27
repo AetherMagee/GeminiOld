@@ -4,7 +4,7 @@ import os
 import pickle
 import random
 import PIL.Image
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, html
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode, ChatAction
 from aiogram.exceptions import TelegramRetryAfter
@@ -379,7 +379,7 @@ async def main_message_handler(message: Message) -> None:
         except ResourceExhausted:
             await message.reply("❌ Бот перегружен. Подождите пару минут.")
         try:
-            await message.reply(out)
+            await message.reply(html.quote(out))
         except TelegramRetryAfter:
             logger.error(f"Flood wait! Requester: {message.from_user.id} | Chat: {message.chat.id}")
             return
