@@ -9,7 +9,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode, ChatAction
 from aiogram.exceptions import TelegramRetryAfter
 from aiogram.filters import Command, CommandStart
-from aiogram.types import Message, User, ReactionTypeEmoji
+from aiogram.types import Message, User, ReactionTypeEmoji, FSInputFile
 import google.generativeai as genai
 from google.api_core.exceptions import ResourceExhausted
 from loguru import logger
@@ -28,6 +28,7 @@ message_log = {
     # chat_id: [message1, message2, ..., messageN]
 }
 banned_users = []
+bug_reporters = []
 
 message_counter = 0
 if os.path.exists(cfg.DATA_FOLDER + "prompt.txt"):
@@ -95,10 +96,12 @@ async def ask_gemini(message: Message, photo_file_id: str) -> str:
 
     prompt = base_prompt.format(
         chat_type="direct message (DM)" if message.from_user.id == message.chat.id else "group",
+        chat_title=f" called {message.chat.title}" if message.from_user.id != message.chat.id else f" with {message.from_user.first_name}",
         all_messages=all_messages, target_message=message_log[message.chat.id][-1],
         image_warning="\n- This message contains an image. Analyze it thoroughly and MAKE SURE you describe it in your "
                       "response verbosely. It will NOT be shown again, so you will use your own text description "
-                      "later on. Start your response with \"This image contains\" in User's language. After giving an "
+                      "later on. Start your response with \"This image contains\" in User's language. So, if the User "
+                      "is talking to you in Russian, start with \"Это изображение содержит\" instead. After giving an "
                       "extended description to the picture, proceed to fulfill the User's request. Once again, "
                       "ALWAYS speak in the language the User is talking to you, EVEN WHEN DESCRIBING THE PICTURE." if
         photo_file_id else "")
@@ -273,14 +276,38 @@ async def partial_reset_command(message: Message) -> None:
 
 @dp.message(CommandStart())
 async def start_command(message: Message) -> None:
-    if message.chat.id == message.from_user.id:
-        await message.reply("👋")
-        await asyncio.sleep(2)
-        await message.reply(f"""Привет! 🤖 Я - бот Gemini. Чтобы задать вопрос - просто напиши мне сообщение. (в чате 
-        нужно либо ответить на моё сообщение, либо упомянуть меня через @) 🔔 Проверить статус бота можно [тут](
-        https://t.me/aetherlounge/2) или через /status 💬 Сбросить мою память - /reset (в чате - только 
-        администраторы) """, disable_web_page_preview=True)
+    await message.reply("👋")
+    await asyncio.sleep(2)
+    await message.reply(f"*Привет!*\n🤖 Я - бот Gemini. Чтобы задать вопрос - просто напиши мне сообщение. _(в "
+                        f"чате нужно либо ответить на моё сообщение, либо упомянуть меня через @)_\n🔔 Проверить "
+                        f"статус бота можно [тут](https://t.me/aetherlounge/2) или через /status\n💬 Сбросить мою "
+                        f"память - /reset или /clear\n⚠️ Сообщить о проблеме - /issue \\[текст]", disable_web_page_preview=True)
 
+
+@dp.message(Command("issue"))
+async def issue_command(message: Message) -> None:
+    global bug_reporters
+    if message.chat.id in bug_reporters:
+        await message.reply("❌ Отправлять жалобы можно только раз в час!")
+        return
+
+    bug_reporters.append(message.chat.id)
+    if message_log[message.chat.id]:
+        slice_index = -len(message_log[message.chat.id]) if len(message_log[message.chat.id]) < 20 else -20
+        log_to_insert = message_log[message.chat.id][slice_index].join('\n')
+    else:
+        log_to_insert = "Chat history is empty."
+    with open(f"/cache/report_{message.chat.id}.txt", "w") as temp_file:
+        temp_file.write(
+            f"Report from {message.chat.title} ({message.chat.id})\nCommand: {message.text}\nLast 20 messages: \n{log_to_insert}"
+        )
+
+    await bot.send_document(cfg.ADMIN_ID, FSInputFile(f"/cache/report_{message.chat.id}.txt", filename="report.txt"), caption=f"Report from {message.chat.id}")
+    await message.reply("✅ Жалоба отправлена.")
+
+    await asyncio.sleep(60*60)
+    bug_reporters.remove(message.chat.id)
+    os.remove(f"/cache/report_{message.chat.id}.txt")
 
 @dp.message(Command("broadcast"))
 async def broadcast(message: Message) -> None:
@@ -343,8 +370,6 @@ async def reload_command(message: Message) -> None:
 @dp.message(Command("directsend"))
 async def directsend_command(message: Message) -> None:
     if not message.from_user.id == cfg.ADMIN_ID:
-        return
-    if not message.from_user.id == message.chat.id:
         return
 
     a = message.text.split(" ")
