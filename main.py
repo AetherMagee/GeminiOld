@@ -223,7 +223,7 @@ async def get_message_text_from_message(message: Message, recursion: bool = Fals
     if message.text:
         text_content = message.text
     elif message.caption:
-        text_content = "[IMAGE ATTACHED] " if not recursion else "" + message.caption
+        text_content = f"[IMAGE ATTACHED] {message.caption}" if not recursion else message.caption
     else:
         text_content = "*No Text*"
 
