@@ -277,11 +277,13 @@ async def partial_reset_command(message: Message) -> None:
 @dp.message(CommandStart())
 async def start_command(message: Message) -> None:
     await message.reply("👋")
+    await bot.send_chat_action(message.chat.id, ChatAction.TYPING)
     await asyncio.sleep(2)
     await message.reply(f"*Привет!*\n🤖 Я - бот Gemini. Чтобы задать вопрос - просто напиши мне сообщение. _(в "
                         f"чате нужно либо ответить на моё сообщение, либо упомянуть меня через @)_\n🔔 Проверить "
                         f"статус бота можно [тут](https://t.me/aetherlounge/2) или через /status\n💬 Сбросить мою "
-                        f"память - /reset или /clear\n⚠️ Сообщить о проблеме - /issue \\[текст]", disable_web_page_preview=True)
+                        f"память - /reset или /clear\n⚠️ Сообщить о проблеме - /issue \\[текст]",
+                        disable_web_page_preview=True)
 
 
 @dp.message(Command("issue"))
@@ -294,27 +296,30 @@ async def issue_command(message: Message) -> None:
     bug_reporters.append(message.chat.id)
     if message_log[message.chat.id]:
         slice_index = -len(message_log[message.chat.id]) if len(message_log[message.chat.id]) < 20 else -20
-        log_to_insert = message_log[message.chat.id][slice_index].join('\n')
+        log_to_insert = "\n".join(message_log[message.chat.id][slice_index:])
     else:
         log_to_insert = "Chat history is empty."
     with open(f"/cache/report_{message.chat.id}.txt", "w") as temp_file:
         temp_file.write(
-            f"Report from {message.chat.title} ({message.chat.id})\nCommand: {message.text}\nLast 20 messages: \n{log_to_insert}"
+            f"Report from {message.chat.title} ({message.chat.id})\nCommand:"
+            f" {message.text}\nLast 20 messages: \n\n\n{log_to_insert}"
         )
 
-    await bot.send_document(cfg.ADMIN_ID, FSInputFile(f"/cache/report_{message.chat.id}.txt", filename="report.txt"), caption=f"Report from {message.chat.id}")
+    await bot.send_document(cfg.ADMIN_ID, FSInputFile(f"/cache/report_{message.chat.id}.txt", filename="report.txt"),
+                            caption=f"Report from {message.chat.id}")
     await message.reply("✅ Жалоба отправлена.")
 
-    await asyncio.sleep(60*60)
+    await asyncio.sleep(60 * 60)
     bug_reporters.remove(message.chat.id)
     os.remove(f"/cache/report_{message.chat.id}.txt")
+
 
 @dp.message(Command("broadcast"))
 async def broadcast(message: Message) -> None:
     if not message.from_user.id == cfg.ADMIN_ID:
         return
 
-    text = message.text.replace("/broadcast ", "💬 Сообщение от разработчика бота: ")
+    text = message.text.replace("/broadcast ", "💬 *Сообщение от разработчика бота:* ")
     for chat_id in message_log.keys():
         if not str(chat_id).startswith("-100"):
             continue
@@ -375,7 +380,7 @@ async def directsend_command(message: Message) -> None:
     a = message.text.split(" ")
     a.pop(0)
     target_chat_id = a.pop(0)
-    await bot.send_message(target_chat_id, " ".join(a))
+    await bot.send_message(target_chat_id, "💬 *Сообщение от разработчика бота:* " + " ".join(a))
 
 
 @dp.message(Command("fuck"))
